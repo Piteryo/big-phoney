@@ -3,6 +3,16 @@ from keras.models import Model
 from keras.layers import Input, LSTM, Dense, Embedding, Dropout, Activation, Bidirectional
 from keras.layers import Concatenate, Dot, Reshape, RepeatVector, Lambda
 from keras.activations import softmax
+import tensorflow as tf
+from keras.backend import set_session
+
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+sess = tf.Session(config=config)
+graph = tf.get_default_graph()
+
+set_session(sess)
+
 from .shared_constants import PREDICTION_MODEL_WEIGHTS_PATH
 from .prediction_model_utils import PredictionModelUtils, START_PHONE_SYM, END_PHONE_SYM, MAX_CHAR_SEQ_LEN, MAX_PADDED_PHONE_SEQ_LEN
 
@@ -109,6 +119,7 @@ class PredictionModel:
         return training_model, testing_encoder_model, testing_decoder_model
 
     def load_weights(self, weights_path):
+        pass
         # Loading the weights for the training model also applies them to the
         # encoder/decoder since they share components.
         self.training_model.load_weights(weights_path)
@@ -121,7 +132,9 @@ class PredictionModel:
         return self.beam_search(char_id_seq)
 
     def beam_search(self, input_char_seq):
-        a = self.encoder.predict(input_char_seq)
+        with sess.as_default():
+            with graph.as_default() as g:
+                a = self.encoder.predict(input_char_seq)
 
         h = np.zeros((1, self.hidden_nodes))
         c = np.zeros((1, self.hidden_nodes))
@@ -140,7 +153,9 @@ class PredictionModel:
 
             for sidx, seq in enumerate(live_seqs):
                 target_seq = np.array([[seq[-1]]])
-                output_token_probs, h, c = self.decoder.predict([target_seq] + live_states[sidx] + [a])
+                with sess.as_default():
+                    with graph.as_default() as g:
+                        output_token_probs, h, c = self.decoder.predict([target_seq] + live_states[sidx] + [a])
 
                 best_token_indices = output_token_probs[0, :].argsort()[-self.search_width:]
 
